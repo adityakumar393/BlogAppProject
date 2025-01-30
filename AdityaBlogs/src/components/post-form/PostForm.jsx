@@ -12,6 +12,7 @@ export default function PostForm({ post }) {
             slug: post?.$id || "",
             content: post?.content || "",
             status: post?.status || "active",
+            featuredImage: post?.featuredImage || "",
         },
     });
 
@@ -19,32 +20,33 @@ export default function PostForm({ post }) {
     const userData = useSelector((state) => state.auth.userData);
 
     const submit = async (data) => {
-        if (post) {
-            const file = data.image[0] ? await appwriteService.uploadFile(data.image[0]) : null;
+        let fileId = post?.featuredImage || "";
 
+        if (data.image && data.image[0]) {
+            const file = await appwriteService.uploadFile(data.image[0]);
             if (file) {
-                appwriteService.deleteFile(post.featuredImage);
+                fileId = file.$id;
+                if (post?.featuredImage) {
+                    await appwriteService.deleteFile(post.featuredImage);
+                }
             }
+        }
 
-            const dbPost = await appwriteService.updatePost(post.$id, {
-                ...data,
-                featuredImage: file ? file.$id : undefined,
-            });
+        const postData = { ...data, featuredImage: fileId };
 
+        if (post) {
+            const dbPost = await appwriteService.updatePost(post.$id, postData);
             if (dbPost) {
                 navigate(`/post/${dbPost.$id}`);
             }
         } else {
-            const file = await appwriteService.uploadFile(data.image[0]);
+            const dbPost = await appwriteService.createPost({
+                ...postData,
+                userId: userData.$id,
+            });
 
-            if (file) {
-                const fileId = file.$id;
-                data.featuredImage = fileId;
-                const dbPost = await appwriteService.createPost({ ...data, userId: userData.$id });
-
-                if (dbPost) {
-                    navigate(`/post/${dbPost.$id}`);
-                }
+            if (dbPost) {
+                navigate(`/post/${dbPost.$id}`);
             }
         }
     };
@@ -56,7 +58,6 @@ export default function PostForm({ post }) {
                 .toLowerCase()
                 .replace(/[^a-zA-Z\d\s]+/g, "-")
                 .replace(/\s/g, "-");
-
         return "";
     }, []);
 
@@ -98,7 +99,7 @@ export default function PostForm({ post }) {
                     accept="image/png, image/jpg, image/jpeg, image/gif"
                     {...register("image", { required: !post })}
                 />
-                {post && (
+                {post?.featuredImage && (
                     <div className="w-full mb-4">
                         <img
                             src={appwriteService.getFilePreview(post.featuredImage)}
